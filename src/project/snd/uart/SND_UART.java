@@ -7,13 +7,26 @@ import ioio.lib.api.Uart;
 import ioio.lib.api.exception.ConnectionLostException;
 import ioio.lib.util.AbstractIOIOActivity;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.util.Arrays;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
 
@@ -21,9 +34,13 @@ public class SND_UART extends AbstractIOIOActivity {
 	private ToggleButton button_;
 	private TextView mesg_;
 	private Uart uart; 
+	private ImageView image_;
 	private InputStream in;
 	private OutputStream out;
 	Boolean mbusy = false;
+	private static final byte[] HEXBYTES = { (byte) '0', (byte) '1', (byte) '2', (byte) '3',
+	      (byte) '4', (byte) '5', (byte) '6', (byte) '7', (byte) '8', (byte) '9', (byte) 'a',
+	      (byte) 'b', (byte) 'c', (byte) 'd', (byte) 'e', (byte) 'f' };
 	/**
 	 * Called when the activity is first created. Here we normally initialize
 	 * our GUI.
@@ -34,6 +51,7 @@ public class SND_UART extends AbstractIOIOActivity {
 		setContentView(R.layout.main);
 		button_ = (ToggleButton) findViewById(R.id.button);
 		mesg_ = (TextView) findViewById(R.id.title);
+		image_ = (ImageView) findViewById(R.id.receiverImage);
 	}
 
 	/**
@@ -47,8 +65,12 @@ public class SND_UART extends AbstractIOIOActivity {
 		/** The on-board LED. */
 		private DigitalOutput led_;
 		private boolean command_flag = false;
-
+		private boolean file_flag = false;
+		File dir,image;
+		FileOutputStream fOut;
+		String hexstream = new String();
 		/**
+		 * 
 		 * Called every time a connection with IOIO has been established.
 		 * Typically used to open pins.
 		 * 
@@ -62,15 +84,26 @@ public class SND_UART extends AbstractIOIOActivity {
 			led_ = ioio_.openDigitalOutput(0, true);
 			//iWrite("test");
 			try{
-				uart = ioio_.openUart(4,5, 57600,Uart.Parity.NONE,Uart.StopBits.ONE); 
+				uart = ioio_.openUart(4, 5, 115200, Uart.Parity.NONE, Uart.StopBits.ONE); 
 				in = uart.getInputStream(); 
 				out = uart.getOutputStream();
+				
+				File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
+				dir = new File (root.getAbsolutePath() + "/100MEDIA/");
+				if(!Environment.MEDIA_MOUNTED.equals(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM))){
+					image = new File(dir,"sample123.jpg");
+					fOut = 	new FileOutputStream( image );
+				}
 			}
 			catch(ConnectionLostException e){
-				iWrite(e.getMessage()); 
-				iWrite(Log.getStackTraceString(e)); 
+				iWrite(e.getMessage(),false); 
+				iWrite(Log.getStackTraceString(e),false); 
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
+		
 
 		/**
 		 * Called repetitively while the IOIO is connected.
@@ -88,59 +121,104 @@ public class SND_UART extends AbstractIOIOActivity {
 					mbusy = true;
 					String command1 = "$CMD1";
 					String command2  = "$CMD2";
+					/*
 					if(command_flag){
 						out.write(command2.getBytes());
 					}
 					else{
 						out.write(command1.getBytes());
-					}
-					sleep(100);
+					}*/
+					sleep(10);
 					testUart();
 					//iWrite("test");
 				}
 			} catch (InterruptedException e) {
-			} catch (IOException e) {
+			} /*catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			}
+			}*/
 		}
 		private void testUart(){
 			try{
 				int available = in.available();
 				if(available > 0 ){
-					byte[] readBuffer = new byte[70];
+					byte[] readBuffer = new byte[200];
 					in.read(readBuffer,0,available);
-					char[] temp = (new String(readBuffer,0,available)).toCharArray();
-					String temp2 = new String(temp);
+					//BufferedOutputStream bos = new BufferedOutputStream(osw);
+					//bos.write(readBuffer);
+					fOut.write(readBuffer,0,available);
+					
+					//iWrite(a+'\n');
+					int len = available;
+				    char[] s = new char[available * 2];
+
+				    for (int i = 0, j = 0; i < len; i++) {
+				      int c = ((int) readBuffer[i]) & 0xff;
+
+				      s[j++] = (char) HEXBYTES[c >> 4 & 0xf];
+				      s[j++] = (char) HEXBYTES[c & 0xf];
+				    }
+				    hexstream = hexstream + new String(s);
+					//char[] temp = (new String(readBuffer,0,available)).toCharArray();
+					//String temp2 = new String(temp);
+					//readBuffer = null;
+					//in.reset();
 					//Post retrieval data processing
-					iWrite(temp2 + '\n');
+					//iWrite(temp2 + '\n');
+					
+					/*
 					if(temp2.contains("ACK1")){
 						command_flag = true;
 					}
 					if(command_flag){
 						iWrite(temp2 + '\n');
-					}
+					}*/
 				}
-				sleep(500);
+				else{
+					if(hexstream.contains("ffd9") && !file_flag){
+						iWrite("File closed",false);
+						file_flag = true;
+						fOut.close();
+						MediaScannerConnection.scanFile(getBaseContext(),
+						          new String[] { image.toString() }, null,
+						          new MediaScannerConnection.OnScanCompletedListener() {	
+									@Override
+									public void onScanCompleted(String path, Uri uri) {
+										iWrite(path,true);
+										
+									}
+								});
+						
+						
+					    
+					}
+					//iWrite("No character");
+				}
+				sleep(10);
 
 			}
 			catch(InterruptedException e){
-				iWrite("Eror:" + e);
+				iWrite("Eror:" + e,false);
 
 			}
 			catch(IOException e){
-				iWrite("Error"+e);
+				iWrite("Error"+e,false);
 
 			}
 			mbusy=false;
 		}
 
-		private void iWrite(String myval){
+		private void iWrite(String myval, boolean image){
 
 			final String crossValue = myval;
+			final boolean imageV = image;
 			runOnUiThread(new Runnable() {
 				@Override
 				public void run(){
+					if(imageV){
+						Bitmap bMap = BitmapFactory.decodeFile("/sdcard/DCIM/100MEDIA/sample123.jpg");
+					    image_.setImageBitmap(bMap);
+					}
 					mesg_.setText(mesg_.getText() + crossValue);
 				}
 			});
