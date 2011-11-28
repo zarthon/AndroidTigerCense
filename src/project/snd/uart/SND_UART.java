@@ -78,8 +78,12 @@ public class SND_UART extends AbstractIOIOActivity {
 		@Override
 		protected void setup() throws ConnectionLostException {
 			led_ = ioio_.openDigitalOutput(0, true);
-			//iWrite("test");
+			
 			try{
+				/*
+				 * Creating uart module with 4 as Rx pin and 5 as Tx pin
+				 */
+				
 				uart = ioio_.openUart(4, 5, 115200, Uart.Parity.NONE, Uart.StopBits.ONE); 
 				in = uart.getInputStream(); 
 				out = uart.getOutputStream();
@@ -207,6 +211,10 @@ public class SND_UART extends AbstractIOIOActivity {
 						iWrite("File closed",false);
 						file_flag = true;
 						fOut.close();
+						/*
+						 * Trigger the MediaScanner Connection so that the image is immediately available
+						 * in the gallery and now on completed can be loaded into the application
+						 */
 						MediaScannerConnection.scanFile(getBaseContext(),
 						          new String[] { image.toString() }, null,
 						          new MediaScannerConnection.OnScanCompletedListener() {	
@@ -235,7 +243,9 @@ public class SND_UART extends AbstractIOIOActivity {
 			}
 			mbusy=false;
 		}
-
+		/*
+		 * TO change the values of textview and imageview at run time.
+		 */
 		private void iWrite(String myval, boolean image){
 
 			final String crossValue = myval;
@@ -245,7 +255,7 @@ public class SND_UART extends AbstractIOIOActivity {
 				public void run(){
 					if(imageV){
 						/*
-						 * Currently the path is hardcoded. This can be dynamically set. 
+						 * Currently the path is hard coded. This can be dynamically set. 
 						 */
 						Bitmap bMap = BitmapFactory.decodeFile("/sdcard/DCIM/100MEDIA/sample123.jpg");
 					    image_.setImageBitmap(bMap);
