@@ -1,24 +1,18 @@
 package project.snd.uart;
 
 import project.snd.uart.R;
-import project.snd.uart.SND_UART.IOIOThread;
 import ioio.lib.api.DigitalOutput;
 import ioio.lib.api.Uart;
 import ioio.lib.api.exception.ConnectionLostException;
 import ioio.lib.util.AbstractIOIOActivity;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.util.Arrays;
 
-import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaScannerConnection;
@@ -38,9 +32,11 @@ public class SND_UART extends AbstractIOIOActivity {
 	private InputStream in;
 	private OutputStream out;
 	Boolean mbusy = false;
+	
 	private static final byte[] HEXBYTES = { (byte) '0', (byte) '1', (byte) '2', (byte) '3',
 	      (byte) '4', (byte) '5', (byte) '6', (byte) '7', (byte) '8', (byte) '9', (byte) 'a',
 	      (byte) 'b', (byte) 'c', (byte) 'd', (byte) 'e', (byte) 'f' };
+	
 	/**
 	 * Called when the activity is first created. Here we normally initialize
 	 * our GUI.
@@ -87,7 +83,10 @@ public class SND_UART extends AbstractIOIOActivity {
 				uart = ioio_.openUart(4, 5, 115200, Uart.Parity.NONE, Uart.StopBits.ONE); 
 				in = uart.getInputStream(); 
 				out = uart.getOutputStream();
-				
+				/* 
+				 * Check whether sd is mounted or not so as to save the file. Currently the file name is hard coded.
+				 * 
+				 */
 				File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
 				dir = new File (root.getAbsolutePath() + "/100MEDIA/");
 				if(!Environment.MEDIA_MOUNTED.equals(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM))){
@@ -116,42 +115,85 @@ public class SND_UART extends AbstractIOIOActivity {
 		@Override
 		protected void loop() throws ConnectionLostException {
 			led_.write(!button_.isChecked());
-			try {
-				if(!mbusy){
-					mbusy = true;
-					String command1 = "$CMD1";
-					String command2  = "$CMD2";
+			if(!mbusy){
+				mbusy = true;
+				try {
 					/*
-					if(command_flag){
-						out.write(command2.getBytes());
-					}
-					else{
-						out.write(command1.getBytes());
-					}*/
-					sleep(10);
-					testUart();
-					//iWrite("test");
+					 * Either call simpleCommunication() or fileTransfer() for the function which needs to be demonstrated
+					 */
+					simpleCommunication();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			} catch (InterruptedException e) {
-			} /*catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}*/
+				
+			}
 		}
-		private void testUart(){
+		private void simpleCommunication() throws IOException, InterruptedException{
+			String command1 = "$CMD1";
+			String command2  = "$CMD2";
+			
+			if(command_flag){
+				out.write(command2.getBytes());
+			}
+			else{
+				out.write(command1.getBytes());
+			}
+			sleep(10);
+			
+			try{
+				/*
+				 * Check whether any data available in the buffer or not. If there is than collect it and do the processing.
+				 */
+				int available = in.available();
+				if(available > 0 ){
+					byte[] readBuffer = new byte[200];
+					in.read(readBuffer,0,available);
+
+					char[] temp = (new String(readBuffer,0,available)).toCharArray();
+					String temp2 = new String(temp);
+					readBuffer = null;
+					in.reset();
+					//Post retrieval data processing
+					//iWrite(temp2 + '\n',false);
+					
+					if(temp2.contains("ACK1") && !command_flag){
+						iWrite(temp2 + '\n', false);
+						command_flag = true;
+					}
+					if(command_flag){
+						iWrite(temp2 + '\n', false);
+					}
+				}
+				else{
+				}
+				sleep(10);
+			}
+			catch(InterruptedException e){
+				iWrite("Eror:" + e,false);
+			}
+			catch(IOException e){
+				iWrite("Error"+e,false);
+
+			}
+			mbusy=false;
+		}
+		
+		private void fileTransfer(){
 			try{
 				int available = in.available();
 				if(available > 0 ){
 					byte[] readBuffer = new byte[200];
 					in.read(readBuffer,0,available);
-					//BufferedOutputStream bos = new BufferedOutputStream(osw);
-					//bos.write(readBuffer);
 					fOut.write(readBuffer,0,available);
-					
-					//iWrite(a+'\n');
 					int len = available;
 				    char[] s = new char[available * 2];
-
+			    	/*
+			    	 * Convert the byte stream into hex string and check for the end bytes of the image
+			    	 */
 				    for (int i = 0, j = 0; i < len; i++) {
 				      int c = ((int) readBuffer[i]) & 0xff;
 
@@ -159,20 +201,6 @@ public class SND_UART extends AbstractIOIOActivity {
 				      s[j++] = (char) HEXBYTES[c & 0xf];
 				    }
 				    hexstream = hexstream + new String(s);
-					//char[] temp = (new String(readBuffer,0,available)).toCharArray();
-					//String temp2 = new String(temp);
-					//readBuffer = null;
-					//in.reset();
-					//Post retrieval data processing
-					//iWrite(temp2 + '\n');
-					
-					/*
-					if(temp2.contains("ACK1")){
-						command_flag = true;
-					}
-					if(command_flag){
-						iWrite(temp2 + '\n');
-					}*/
 				}
 				else{
 					if(hexstream.contains("ffd9") && !file_flag){
@@ -184,13 +212,13 @@ public class SND_UART extends AbstractIOIOActivity {
 						          new MediaScannerConnection.OnScanCompletedListener() {	
 									@Override
 									public void onScanCompleted(String path, Uri uri) {
+										/*
+										 * Update the image in the application to the newely retrieved image.
+										 */
 										iWrite(path,true);
 										
 									}
 								});
-						
-						
-					    
 					}
 					//iWrite("No character");
 				}
@@ -216,6 +244,9 @@ public class SND_UART extends AbstractIOIOActivity {
 				@Override
 				public void run(){
 					if(imageV){
+						/*
+						 * Currently the path is hardcoded. This can be dynamically set. 
+						 */
 						Bitmap bMap = BitmapFactory.decodeFile("/sdcard/DCIM/100MEDIA/sample123.jpg");
 					    image_.setImageBitmap(bMap);
 					}
