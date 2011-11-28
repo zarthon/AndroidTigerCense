@@ -159,8 +159,7 @@ public class SND_UART extends AbstractIOIOActivity {
 
 					char[] temp = (new String(readBuffer,0,available)).toCharArray();
 					String temp2 = new String(temp);
-					readBuffer = null;
-					in.reset();
+					
 					//Post retrieval data processing
 					//iWrite(temp2 + '\n',false);
 					
